@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import {useState, useEffect, useRef, useCallback} from "react"
 import {
   Copy,
   Maximize2,
@@ -17,14 +17,15 @@ import {
   ChevronUp,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+// import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { Badge } from "@/components/ui/badge"
 
 import PythonEditor,  { PythonEditorRef } from "@/components/python-editor";
+import { setUpMediaSources, createSessionOffer, joinSessionByID } from "@/lib/web-rtc";
 
 
-export default function CodingInterviewApp() {
+export default function App() {
   const [isProblemPanelOpen, setIsProblemPanelOpen] = useState(true)
   const [isInterviewerVisible, setIsInterviewerVisible] = useState(true)
   const [isIntervieweeVisible, setIsIntervieweeVisible] = useState(true)
@@ -34,14 +35,36 @@ export default function CodingInterviewApp() {
   const [isSessionLinkExpanded, setIsSessionLinkExpanded] = useState(false)
   const { toast } = useToast()
   const [isDarkMode, setIsDarkMode] = useState(false)
-  const pythonEditorRef = useRef<PythonEditorRef>(null);
 
-  // Generate a random session ID on page load
+  const pythonEditorRef = useRef<PythonEditorRef>(null);
+  const interviewerVideoRef = useRef<any>(null);
+  const intervieweeVideoRef = useRef<any>(null);
+  const sessionInputRef = useRef<any>(null);
+
   useEffect(() => {
-    const sessionId = Math.random().toString(36).substring(2, 10)
-    const link = `${window.location.origin}?session=${sessionId}`
-    setSessionLink(link)
-  }, [])
+    setUpMediaSources({
+      localVideoElement: intervieweeVideoRef.current,
+      remoteVideoElement: interviewerVideoRef.current
+    })
+        .catch(err => alert("error during setup of media sources: " + err))
+  }, []);
+
+  const handleCreateSession = useCallback(() => {
+    createSessionOffer()
+        .then((sessionId) => {
+          // const sessionId = Math.random().toString(36).substring(2, 10)
+          const link = `${window.location.origin}?session=${sessionId}`
+          setSessionLink(link)
+        })
+        .catch(err => alert("error during session creation: " + err))
+  }, []);
+
+  const handleJoinSession = useCallback(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionQueryParam: string | null = urlParams.get('session');
+    joinSessionByID(sessionQueryParam || sessionInputRef.current.value)
+        .catch(err => alert("error when trying to join session: " + err))
+  }, []);
 
   // Apply dark mode class to html element
   useEffect(() => {
@@ -54,6 +77,7 @@ export default function CodingInterviewApp() {
 
   const copySessionLink = () => {
     navigator.clipboard.writeText(sessionLink)
+    alert('copied!') // todo: remove once toast message is fixed
     toast({
       title: "Link copied",
       description: "Session link copied to clipboard",
@@ -61,12 +85,43 @@ export default function CodingInterviewApp() {
     })
   }
 
+/*
+  useEffect(() => {
+    if (!interviewerVideoRef.current || !intervieweeVideoRef.current) return;
+
+    const script = document.createElement('script');
+    script.src = "https://webrtc.github.io/adapter/adapter-latest.js";
+    script.async = true;
+    document.body.appendChild(script);
+
+    const mediaStreamConstraints = { video: true };
+
+    // Local stream that will be reproduced on the video.
+    // const localStream = useMemo(() => null, []);
+
+    // Handles success by adding the MediaStream to the video element.
+    function gotLocalMediaStream(mediaStream: any) {
+      // localStream = mediaStream;
+      intervieweeVideoRef.current.srcObject = mediaStream;
+    }
+
+    // Handles error by logging a message to the console with the error message.
+    function handleLocalMediaStreamError(error: any) {
+      console.log('navigator.getUserMedia error: ', error);
+    }
+
+    // Initializes media stream.
+    navigator.mediaDevices.getUserMedia(mediaStreamConstraints)
+        .then(gotLocalMediaStream).catch(handleLocalMediaStreamError);
+  }, []);
+*/
+
   return (
     <section className="flex min-h-screen flex-col bg-background dark:bg-gray-900">
       {/* Header with session link */}
       <header className="border-b dark:border-gray-700 bg-card dark:bg-gray-800 px-4 py-2">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-          <h1 className="text-xl font-bold dark:text-white">CodeInterview</h1>
+          <h1 className="text-xl font-bold dark:text-white">DevDuo</h1>
 
           <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
             <div className="flex items-center mr-2">
@@ -131,6 +186,24 @@ export default function CodingInterviewApp() {
             >
               <Copy className="h-4 w-4" />
               <span className="hidden md:inline">Copy</span>
+            </Button>
+
+            <Button
+                size="sm"
+                variant="outline"
+                onClick={handleCreateSession}
+                className="hidden sm:flex dark:border-gray-700 dark:text-gray-200"
+            >
+              <span className="hidden md:inline">Create Session</span>
+            </Button>
+            <input ref={sessionInputRef} placeholder={"enter session ID"}/>
+            <Button
+                size="sm"
+                variant="outline"
+                onClick={handleJoinSession}
+                className="hidden sm:flex dark:border-gray-700 dark:text-gray-200"
+            >
+              <span className="hidden md:inline">Join Session</span>
             </Button>
           </div>
         </div>
@@ -240,7 +313,7 @@ export default function CodingInterviewApp() {
           </div>
 
           {/* Code editor and output tabs */}
-          <Tabs defaultValue="editor" className="flex-1">
+          {/*<Tabs defaultValue="editor" className="flex-1">
             <TabsList className="mx-4 mt-2 dark:bg-gray-800">
               <TabsTrigger
                 value="editor"
@@ -256,37 +329,40 @@ export default function CodingInterviewApp() {
               </TabsTrigger>
             </TabsList>
             <TabsContent value="editor" className="flex-1 p-0 data-[state=active]:flex lg:h-full">
-              <div className="flex-1 overflow-auto bg-muted/30 dark:bg-gray-800 p-4 font-mono text-sm min-h-[300px] dark:text-gray-200">
-                {selectedLanguage === "javascript" && (
-                  <pre className="text-sm">
-                    {/*<code>*/}
-                    {/*</code>*/}
-                  </pre>
-                )}
-                {selectedLanguage === "python" && (
-                  <pre className="text-sm">
-                    <PythonEditor
-                        ref={pythonEditorRef}
-                        initialCode={
-                      `from typing import List
 
-def twoSum(nums: List[int], target: int) -> List[int]:
-    # Write your solution here
-    pass
-
-print(twoSum(nums=[2,7,11,15], target=9))`
-                    }
-                    />
-                  </pre>
-                )}
-              </div>
             </TabsContent>
             <TabsContent value="output" className="flex-1 p-0 data-[state=active]:flex lg:h-full">
               <div className="flex-1 overflow-auto bg-black p-4 font-mono text-sm text-green-400 min-h-[300px]">
                 <p>// Output will appear here after running your code</p>
               </div>
             </TabsContent>
-          </Tabs>
+          </Tabs>*/}
+
+          {/* Code Editor Panel  */}
+          <div className="flex-1 overflow-auto bg-muted/30 dark:bg-gray-800 p-4 font-mono text-sm min-h-[300px] dark:text-gray-200">
+            {selectedLanguage === "javascript" && (
+                <pre className="text-sm">
+                    {/*<code>*/}
+                  {/*</code>*/}
+                  </pre>
+            )}
+            {selectedLanguage === "python" && (
+                <pre className="text-sm">
+                    <PythonEditor
+                        ref={pythonEditorRef}
+                        initialCode={
+                          `from typing import List
+
+def twoSum(nums: List[int], target: int) -> List[int]:
+    # Write your solution here
+    pass
+
+print(twoSum(nums=[2,7,11,15], target=9))`
+                        }
+                    />
+                  </pre>
+            )}
+          </div>
         </div>
 
         {/* Right panel with video feeds */}
@@ -306,23 +382,27 @@ print(twoSum(nums=[2,7,11,15], target=9))`
           </div>
           <div className="flex flex-col gap-2 overflow-hidden p-2">
             {isInterviewerVisible && (
-              <div className="relative aspect-square w-full overflow-hidden rounded-md bg-muted dark:bg-gray-800">
+                <video ref={interviewerVideoRef} autoPlay playsInline ></video>
+              /*<div className="relative aspect-square w-full overflow-hidden rounded-md bg-muted dark:bg-gray-800">
                 <div className="absolute inset-0 flex items-center justify-center">
                   <span className="text-muted-foreground dark:text-gray-400">Interviewer</span>
                 </div>
                 <div className="absolute bottom-2 right-2">
                   <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 rounded-full bg-background/80 dark:bg-gray-700/80 backdrop-blur-sm"
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 rounded-full bg-background/80 dark:bg-gray-700/80 backdrop-blur-sm"
                   >
-                    <Maximize2 className="h-3 w-3 dark:text-gray-300" />
+                    <Maximize2 className="h-3 w-3 dark:text-gray-300"/>
                   </Button>
+                  <video ref={interviewerVideoRef} autoPlay playsInline></video>
                 </div>
-              </div>
+              </div>*/
             )}
             {isIntervieweeVisible && (
-              <div className="relative aspect-square w-full overflow-hidden rounded-md bg-muted dark:bg-gray-800">
+
+                  <video ref={intervieweeVideoRef} autoPlay playsInline ></video>
+              /*<div className="relative aspect-square w-full overflow-hidden rounded-md bg-muted dark:bg-gray-800">
                 <div className="absolute inset-0 flex items-center justify-center">
                   <span className="text-muted-foreground dark:text-gray-400">You</span>
                 </div>
@@ -335,7 +415,7 @@ print(twoSum(nums=[2,7,11,15], target=9))`
                     <Maximize2 className="h-3 w-3 dark:text-gray-300" />
                   </Button>
                 </div>
-              </div>
+              </div>*/
             )}
           </div>
         </div>

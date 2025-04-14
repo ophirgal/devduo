@@ -27,7 +27,7 @@ const PythonEditor = forwardRef<PythonEditorRef, PythonEditorProps>(
 
     const runCode = useCallback(async () => {
         if (!pyodide) {
-            setOutput("Pyodide is still loading...");
+            setOutput("Loading Python interpreter...\n");
             return;
         }
 
@@ -44,7 +44,7 @@ const PythonEditor = forwardRef<PythonEditorRef, PythonEditorProps>(
         runCode: runCode
     }), [runCode]);
 
-
+    // Load Python interpreter
     useEffect(() => {
         const load = async () => {
             // @ts-ignore
@@ -78,6 +78,7 @@ const PythonEditor = forwardRef<PythonEditorRef, PythonEditorProps>(
         };
     }, []);
 
+    // Initialize code editor with boilerplate code
     useEffect(() => {
         if (!editorRef.current || viewRef.current) return;
 

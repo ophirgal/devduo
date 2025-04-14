@@ -2,8 +2,9 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Coding Interview App',
-  description: 'Peer-to-Peer Coding Interview App',
+  title: 'DevDuo',
+  description: 'DevDuo is a peer-to-peer coding interview platform.',
+  icons: '/favicon.svg',
 }
 
 export default function RootLayout({
